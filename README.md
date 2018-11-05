@@ -4,7 +4,7 @@ This is a project targeting to extract the minimal DFA given a well-trained RNN 
 
 ## Tomita Grammars
 
-The Tomita grammars is a set of widely used grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon binary alphabet $\Sigma=\{0,1\}$, as shown below.
+The Tomita grammars is a set of widely used grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon binary alphabet <img src="http://chart.googleapis.com/chart?cht=tx&chl= \Sigma=\{0,1\}" style="border:none;">, as shown below.
 
 ```
 Tomita 1    1*
