@@ -1,12 +1,10 @@
 # RNN to DFA
 
-<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>
-
 This is a project aiming to extract the minimal DFA from a well-trained RNN model.
 
 ## Tomita Grammars
 
-The Tomita grammars is a set of widely used benchmark grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon binary alphabet \\(\Sigma=\\{0,1\\}\\), as shown below.
+The Tomita grammars is a set of widely used benchmark grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon binary alphabet <img src="http://latex.codecogs.com/gif.latex?\Sigma=\{0,1\}" />, as shown below.
 
 ```
 Tomita 1    1*
