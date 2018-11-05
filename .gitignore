@@ -1,2 +1,10 @@
 # Datasets
 *.pkl
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info
