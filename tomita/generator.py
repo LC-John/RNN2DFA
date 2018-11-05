@@ -10,10 +10,16 @@ import tomita
 
 class Generator(object):
     
-    def __init__(self, dfa):
+    def __init__(self, dfa, train_ratio):
         
         self.__dfa = dfa
         self.__Sigma = ["0", "1"]
+        if train_ratio <= 0:
+            self.__train_ratio = 0
+        elif train_ratio >= 1:
+            self.__train_ratio = 1
+        else:
+            self.__train_ratio = train_ratio
         
     def generate(self, maxl):
         
@@ -23,12 +29,17 @@ class Generator(object):
             for s in seqs:
                 self.__d[0].append(s)
                 self.__d[1].append(int(self.__dfa.classify(s)))
-        return self.__d
+        split_idx = int(self.__train_ratio * len(self.__d[0]))
+        self.__d_te = [self.__d[0][split_idx:], self.__d[1][split_idx:]]
+        self.__d_tr = [self.__d[0][:split_idx], self.__d[1][:split_idx]]
                 
     def save(self, path):
         
         with open(path, "wb") as f:
-            pickle.dump(self.__d, f)
+            pickle.dump({"re": self.__dfa.get_re(),
+                         "alphabet": self.__dfa.get_alphabet(),
+                         "train": self.__d_tr,
+                         "test": self.__d_te}, f)
         
     def __generate_seq(self, Sigma, l):
         
@@ -52,7 +63,7 @@ if __name__ == "__main__":
             tomita.Tomita_6,
             tomita.Tomita_7]
     for i in range(len(dfas)):
-        G = Generator(dfas[i]())
+        G = Generator(dfas[i](), 0.5)
         G.generate(maxl)
         G.save("tomita_"+str(i+1)+".pkl")
         print ("tomita "+str(i+1)+" complete!")
