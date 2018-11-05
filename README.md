@@ -1,10 +1,12 @@
 # RNN to DFA
 
-This is a project targeting to extract the minimal DFA given a well-trained RNN model.
+<script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=default"></script>
+
+This is a project aiming to extract the minimal DFA from a well-trained RNN model.
 
 ## Tomita Grammars
 
-The Tomita grammars is a set of widely used grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon binary alphabet <img src="http://chart.googleapis.com/chart?cht=tx&chl= \Sigma=\{0,1\}" style="border:none;">, as shown below.
+The Tomita grammars is a set of widely used benchmark grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon binary alphabet \\(\Sigma=\\{0,1\\}\\), as shown below.
 
 ```
 Tomita 1    1*
@@ -12,7 +14,7 @@ Tomita 2    (10)*
 Tomita 3    all strings without containing odd number of consecutive 0's after odd number of consecutive 1's
 Tomita 4    all strings without containing 3 consecutive 0's (000)
 Tomita 5    all strings with even numbers of 0's and 1's
-Tomita 6    all strings with the difference of numbers of 0's and 1's being 3n
+Tomita 6    all strings satisfying #(0)-#(1) = 3n (n=...,-1,0,1,...)
 Tomita 7    1*0*1*0*
 ```
 
@@ -20,4 +22,4 @@ The corresponding minimal DFA's are shown below. The number of states are less t
 
 ![tomita grammars dfa](./images/TomitaDFA.jpg)
 
-The 7 DFA's of the Tomita grammars are defined in ```./tomita/tomita.py```, which are able to classify a given 0/1 sequence (ACC/REJ) and generate 0/1 sequences along with teh ACC/REJ labels. Run ```python3 generator.py``` in the directory ```./tomita/``` to generate the datasets of the Tomita grammars.
+The 7 DFA's are defined in ```./tomita/tomita.py```, which are able to classify a given sequence (ACC/REJ) and generate sequences along with teh ACC/REJ labels. As the 7 datasets are large to some degree, and they are automatically generated, they are excluded from this repo. **REMEBER TO GENERATE THE DATASET BEFORE TRAINING THE RNN MODELS.** Run ```python3 generator.py``` under the directory ```./tomita/``` to generate the 7 datasets of the Tomita grammars. 
