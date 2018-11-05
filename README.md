@@ -19,3 +19,5 @@ Tomita 7    1*0*1*0*
 The corresponding minimal DFA's are shown below. The number of states are less than 5. States with thick border represent ACC states, while states with thin border represent REJ states. States with an "S" are starting staes of each DFA. The DFA's are equivalent to Tomita 1 to Tomita 7, from left to right.
 
 ![tomita grammars dfa](./images/TomitaDFA.jpg)
+
+The 7 DFA's of the Tomita grammars are defined in ```./tomita/tomita.py```, which are able to classify a given 0/1 sequence (ACC/REJ) and generate 0/1 sequences along with teh ACC/REJ labels. Run ```python3 generator.py``` in the directory ```./tomita/``` to generate the datasets of the Tomita grammars.
