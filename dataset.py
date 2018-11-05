@@ -116,10 +116,6 @@ class Dataset(object):
     def get_regular_language(self):
         
         return self.__re
-        
-        
-        
-            
             
 if __name__ == "__main__":
     

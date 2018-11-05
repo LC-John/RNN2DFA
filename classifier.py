@@ -15,8 +15,8 @@ from util import write_log
 
 class SequenceClassifier(object):
     
-    def __init__(self, seq_max_len=20, embed_w=300, vocab_size=30000, n_class=2,
-                 n_layer=2, n_hidden=300, keep_prob=0.9, lr=1e-5, is_training=True):
+    def __init__(self, seq_max_len=20, embed_w=5, vocab_size=2, n_class=2,
+                 n_hidden=128, cell_type="rnn", keep_prob=0.9, lr=1e-5, is_training=True):
         
         self.__is_training = is_training
         if is_training == False:
