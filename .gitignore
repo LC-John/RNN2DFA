@@ -5,6 +5,7 @@
 *.log
 
 # Model
+checkpoint
 *.ckpt
 *.ckpt.*
 
