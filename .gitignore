@@ -1,6 +1,13 @@
 # Datasets
 *.pkl
 
+# Logging
+*.log
+
+# Model
+*.ckpt
+*.ckpt.*
+
 # Python
 *.pyc
 *.pyo
