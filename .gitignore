@@ -2,6 +2,7 @@
 *.pkl
 
 # Logging
+/log/
 *.log
 
 # Model
