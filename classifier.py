@@ -147,18 +147,22 @@ if __name__ == "__main__":
         tomita_idx = int(sys.argv[1])
     
     dataset_path = "./tomita/tomita_"+str(tomita_idx)+".pkl"
-    cell_type = "rnn"
+    cell_type = "gru"
     
     seq_max_len = 20
     embed_w = 5
     n_cell = 128
     
-    n_epoch = 20
+    n_epoch = 100
     batch_size = 32
-    model_save_path = "./model/tomita_"+str(tomita_idx)+"_rnn.ckpt"
+    model_root = "./model/tomita_"+str(tomita_idx)+"_rnn"+"/"
+    if not os.path.exists(model_root):
+        os.system("mkdir "+model_root)
+    model_save_path = os.path.join(model_root, "model.ckpt")
     log_save_path = "./log/tomita_"+str(tomita_idx)+"_rnn.log"
     
     os.environ['CUDA_VISIBLE_DEVICES'] = "2"
+    os.system("rm -rf "+log_save_path)
     
     data = dataset.Dataset(dataset_path, seq_max_len)
     model = SequenceClassifier(seq_max_len, embed_w, len(data.get_alphabet())+1, 2, n_cell,
@@ -205,5 +209,5 @@ if __name__ == "__main__":
             model.save(sess, model_save_path)
         write_log('Epoch '+str(epoch+1)+'\ttrain loss = '+str(train_loss_mean)
                 +'\ttest loss = '+str(test_loss_mean)+"\ttrain acc = "+str(train_acc_mean)
-                +'\ttest acc = '+str(test_acc_mean),
+                +'\ttest acc = '+str(test_acc_mean)+'\n',
                 log_save_path)
