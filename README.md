@@ -1,10 +1,10 @@
 # RNN to DFA
 
-This is a project aiming to extract the minimal DFA from a well-trained RNN model.
+This is a project aiming to extract a minimal DFA from a well-trained RNN model.
 
 ## Tomita Grammars
 
-The Tomita grammars is a set of widely used benchmark grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon binary alphabet <img src="http://latex.codecogs.com/gif.latex?\Sigma=\{0,1\}" />, as shown below.
+The Tomita grammars are a set of widely used benchmark grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon the binary alphabet <img src="http://latex.codecogs.com/gif.latex?\Sigma=\{0,1\}" />, as shown below.
 
 ```
 Tomita 1    1*
@@ -20,4 +20,4 @@ The corresponding minimal DFA's are shown below. The number of states are less t
 
 ![tomita grammars dfa](./images/TomitaDFA.jpg)
 
-The 7 DFA's are defined in ```./tomita/tomita.py```, which are able to classify a given sequence (ACC/REJ) and generate sequences along with teh ACC/REJ labels. As the 7 datasets are large to some degree, and they are automatically generated, they are excluded from this repo. **REMEBER TO GENERATE THE DATASET BEFORE TRAINING THE RNN MODELS.** Run ```python3 generator.py``` under the directory ```./tomita/``` to generate the 7 datasets of the Tomita grammars. 
+The 7 DFA's are defined in ```./tomita/tomita.py```, which are able to classify a given sequence (ACC/REJ) and generate sequences with their corresponding ACC/REJ labels. As the 7 datasets are large to some degree, and they are able to be automatically generated, they are excluded from this repo. **REMEMBER TO GENERATE THE DATASET BEFORE TRAINING THE RNN MODELS.** Run ```python3 generator.py``` under the directory ```./tomita/``` to generate the 7 datasets of the Tomita grammars. 
