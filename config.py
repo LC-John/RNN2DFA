@@ -10,11 +10,11 @@ import tensorflow as tf
 
 tf.app.flags.DEFINE_integer("tomita", 1,
                             "Index of the regular grammar in Tomita grammars")
-tf.app.flags.DEFINE_string("dataset_root", "/tomita/",
+tf.app.flags.DEFINE_string("dataset_root", "./tomita/",
                            "Directory where all datasets of tomita grammars are stored")
-tf.app.flags.DEFINE_string("model_root", "/model/",
+tf.app.flags.DEFINE_string("model_root", "./model/",
                            "Directory where all RNN models are stored")
-tf.app.flags.DEFINE_string("log_root", "/log/",
+tf.app.flags.DEFINE_string("log_root", "./log/",
                            "Directory where all training logs are stored")
 
 tf.app.flags.DEFINE_string("cell", "rnn",

@@ -16,7 +16,8 @@ from util import write_log
 class SequenceClassifier(object):
     
     def __init__(self, seq_max_len=20, embed_w=5, vocab_size=2, n_class=2,
-                 n_hidden=128, cell_type="rnn", keep_prob=0.9, lr=1e-5, is_training=True):
+                 n_hidden=128, cell_type="rnn", keep_prob=0.9, lr=1e-5,
+                 n_gpu=1, is_training=True):
         
         self.__is_training = is_training
         if is_training == False:
@@ -30,65 +31,92 @@ class SequenceClassifier(object):
                                   dtype=tf.int32, name="label")
         self.__L = tf.placeholder(shape=[None], dtype=tf.int32, name="valid_len")
         
-        # embedding
-        with tf.device("/cpu:0"):
-            self.__embed_matrix = tf.get_variable("embedding_martix",
-                                                  [vocab_size, embed_w],
-                                                  dtype=tf.float32)
-            self.__embed = tf.nn.embedding_lookup(self.__embed_matrix, self.__X,
-                                                  name="embedding")
-        # input dropout
-        if is_training and keep_prob < 1:
-            self.__rnn_in = tf.nn.dropout(self.__embed, keep_prob,
-                                          name="input_dropout")
-        else:
-            self.__rnn_in = self.__embed
-        
-        # rnn architecture
+        # embedding matrix
+        self.__embed_matrix = tf.get_variable("embedding_martix",
+                                              [vocab_size, embed_w],
+                                              dtype=tf.float32)
+        # softmax dense layer
+        self.__dense_W = tf.get_variable("dense_w",
+                                         [n_hidden, n_class],
+                                         dtype=tf.float32)
+        self.__dense_b = tf.get_variable("dense_b", [n_class],
+                                         dtype=tf.float32)
+        # rnn cells
         self.__cell_fw = self.__make_cell(is_training, n_hidden, keep_prob, cell_type)
-        self.__rnn_outs, self.__rnn_states = tf.nn.dynamic_rnn(self.__cell_fw,
-                                                               self.__rnn_in,
-                                                               self.__L,
-                                                               dtype=tf.float32)
         
-        # softmax output
-        self.__dense_W = tf.Variable(tf.random_normal([n_hidden, n_class]),
-                                     name="dense_w")
-        self.__dense_b = tf.Variable(tf.constant(0, dtype=tf.float32,
-                                                 shape=[n_class]),
-                                     name="dense_b")
-        if cell_type in ["rnn", "gru"]:
-            self.__logit = tf.matmul(self.__rnn_states, self.__dense_W) + self.__dense_b
-        elif cell_type in ["lstm"]:
-            self.__logit = tf.matmul(self.__rnn_states.h, self.__dense_W) + self.__dense_b
-        self.__prob = tf.nn.softmax(self.__logit, name="probability")
+        self.__x_list = tf.split(self.__X, num_or_size_splits=n_gpu,
+                                 axis=0, name="x_list")
+        self.__y_list = tf.split(self.__Y, num_or_size_splits=n_gpu,
+                                 axis=0, name="y_list")
+        self.__l_list = tf.split(self.__L, num_or_size_splits=n_gpu,
+                                 axis=0, name="l_list")
+            
+        self.__loss_list = []
+        self.__output_list =[]
+        self.__acc_list = []
+            
+        for i in range(n_gpu):
+            with tf.device("/device:GPU:"+str(i)):
+                
+                tmp_x = self.__x_list[i]
+                tmp_y = self.__y_list[i]
+                tmp_l = self.__l_list[i]
 
-        # cross entropy loss
-        self.__Y_onehot = tf.one_hot(self.__Y, n_class)
-        self.__loss_vec = tf.nn.softmax_cross_entropy_with_logits(labels=self.__Y_onehot,
-                                                                  logits=self.__logit,
-                                                                  name="loss_for_each")
-        self.__loss = tf.reduce_mean(self.__loss_vec, name="loss")
+                # embedding
+                self.__embed = tf.nn.embedding_lookup(self.__embed_matrix, tmp_x,
+                                                      name="embedding")
+                # input dropout
+                if is_training and keep_prob < 1:
+                    self.__rnn_in = tf.nn.dropout(self.__embed, keep_prob,
+                                                  name="input_dropout")
+                else:
+                    self.__rnn_in = self.__embed
+                
+                self.__rnn_outs, self.__rnn_states = tf.nn.dynamic_rnn(self.__cell_fw,
+                                                                       self.__rnn_in,
+                                                                       tmp_l,
+                                                                       dtype=tf.float32)
+                
+                if cell_type in ["rnn", "gru"]:
+                    self.__logit = tf.matmul(self.__rnn_states,
+                                             self.__dense_W) + self.__dense_b
+                elif cell_type in ["lstm"]:
+                    self.__logit = tf.matmul(self.__rnn_states.h,
+                                             self.__dense_W) + self.__dense_b
+                self.__prob = tf.nn.softmax(self.__logit, name="probability")
         
-        # accuracy
-        self.__output = tf.cast(tf.argmax(self.__prob, -1,
-                                          name="output_label"), tf.int32)
-        self.__accurate = tf.equal(self.__Y, self.__output, name="accurate_output")
-        self.__accuracy = tf.reduce_mean(tf.cast(self.__accurate, tf.float32),
-                                         name="accuracy")
+                # cross entropy loss
+                self.__Y_onehot = tf.one_hot(tmp_y, n_class)
+                self.__loss_vec = tf.nn.softmax_cross_entropy_with_logits(labels=self.__Y_onehot,
+                                                                          logits=self.__logit,
+                                                                          name="loss_for_each")
+                self.__loss_list.append(tf.reduce_mean(self.__loss_vec,
+                                                       name="loss"))
+                
+                # accuracy
+                self.__output_list.append(tf.cast(tf.argmax(self.__prob, -1,
+                                                            name="output_label"), tf.int32))
+                self.__accurate = tf.equal(tmp_y, self.__output_list[-1],
+                                           name="accurate_output")
+                self.__acc_list.append(tf.reduce_mean(tf.cast(self.__accurate, tf.float32),
+                                                      name="accuracy"))
+            
+        self.__loss = tf.reduce_mean(self.__loss_list, 0, name="final_loss")
+        self.__output = tf.concat(self.__output_list, 0, name="final_output")
+        self.__acc = tf.reduce_mean(self.__acc_list, 0, name="final_accuracy")
         
         # training operation
         if is_training:
             self.__opt = tf.train.AdamOptimizer(lr, name="adam_optimizer")
             self.__train_op = self.__opt.minimize(self.__loss,
                                                   global_step=tf.train.get_or_create_global_step())
-
+            
         self.__saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
 
     def train_op(self, sess, X, Y, L):
         
         if self.__is_training:
-            _, l, a = sess.run((self.__train_op, self.__loss, self.__accuracy),
+            _, l, a = sess.run((self.__train_op, self.__loss, self.__acc),
                                feed_dict={self.__X: X,
                                           self.__Y: Y,
                                           self.__L: L})
@@ -98,7 +126,7 @@ class SequenceClassifier(object):
     
     def test_op(self, sess, X, Y, L):
         
-        l, a = sess.run((self.__loss, self.__accuracy),
+        l, a = sess.run((self.__loss, self.__acc),
                         feed_dict={self.__X: X,
                                    self.__Y: Y,
                                    self.__L: L})
@@ -161,14 +189,15 @@ if __name__ == "__main__":
     model_save_path = os.path.join(model_root, "model.ckpt")
     log_save_path = "./log/tomita_"+str(tomita_idx)+"_rnn.log"
     
-    os.environ['CUDA_VISIBLE_DEVICES'] = "2"
+    os.environ['CUDA_VISIBLE_DEVICES'] = "1,4"
+    n_gpu = 2
     os.system("rm -rf "+log_save_path)
     
     data = dataset.Dataset(dataset_path, seq_max_len)
     model = SequenceClassifier(seq_max_len, embed_w, len(data.get_alphabet())+1, 2, n_cell,
-                               cell_type, 0.8, 1e-5, True)
+                               cell_type, 0.8, 1e-5, n_gpu, True)
     
-    cfg = tf.ConfigProto()
+    cfg = tf.ConfigProto(allow_soft_placement=True)
     cfg.gpu_options.allow_growth = True
     sess = tf.Session(config=cfg)
     sess.run(tf.global_variables_initializer())
@@ -184,7 +213,7 @@ if __name__ == "__main__":
         n_tr_iter = int(data.get_train_size() / batch_size)
         n_te_iter = int(data.get_test_size() / batch_size)
         for iteration in range(n_tr_iter):
-            x, y, l = data.minibatch(batch_size)
+            x, y, l = data.minibatch(batch_size*n_gpu)
             loss, acc = model.train_op(sess, x, y, l)
             train_acc_list.append(acc)
             train_loss_list.append(loss)
@@ -192,7 +221,7 @@ if __name__ == "__main__":
                 print("Epoch = %d\t iter = %d/%d\tTrain Loss = %.3f\tAcc = %.3f"
                       % (epoch+1, iteration+1, n_tr_iter, loss, acc))
         for iteration in range(n_te_iter):
-            x, y, l = data.test_batch(batch_size)
+            x, y, l = data.test_batch(batch_size*n_gpu)
             loss, acc = model.test_op(sess, x, y, l)
             test_acc_list.append(acc)
             test_loss_list.append(loss)
