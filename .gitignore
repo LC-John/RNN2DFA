@@ -2,14 +2,12 @@
 *.pkl
 
 # Logging
-/log/
 *.log
 
 # Model
 checkpoint
 *.ckpt
 *.ckpt.*
-/model/
 
 # Python
 *.pyc
