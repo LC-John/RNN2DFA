@@ -26,7 +26,7 @@ tf.app.flags.DEFINE_integer("embed_w", 5,
 tf.app.flags.DEFINE_integer("cell_n", 128,
                             "cell number of the single RNN layer")
 
-tf.app.flags.DEFINE_string("gpu", "0",
+tf.app.flags.DEFINE_string("gpu", "0,1,2,3",
                            "Selection of GPU('s)")
 
 tf.app.flags.DEFINE_boolean("is_training", True,

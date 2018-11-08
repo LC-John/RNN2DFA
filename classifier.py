@@ -32,9 +32,13 @@ class SequenceClassifier(object):
         self.__L = tf.placeholder(shape=[None], dtype=tf.int32, name="valid_len")
         
         # embedding matrix
-        self.__embed_matrix = tf.get_variable("embedding_martix",
-                                              [vocab_size, embed_w],
-                                              dtype=tf.float32)
+        with tf.device("/cpu:0"):
+            self.__embed_matrix = tf.get_variable("embedding_martix",
+                                                  [vocab_size, embed_w],
+                                                  dtype=tf.float32)
+            self.__embed = tf.nn.embedding_lookup(self.__embed_matrix, self.__X,
+                                                  name="embedding")
+        
         # softmax dense layer
         self.__dense_W = tf.get_variable("dense_w",
                                          [n_hidden, n_class],
@@ -44,8 +48,15 @@ class SequenceClassifier(object):
         # rnn cells
         self.__cell_fw = self.__make_cell(is_training, n_hidden, keep_prob, cell_type)
         
-        self.__x_list = tf.split(self.__X, num_or_size_splits=n_gpu,
-                                 axis=0, name="x_list")
+        # optimizer, if training
+        if is_training:
+            self.__opt = tf.train.AdamOptimizer(lr, name="adam_optimizer")
+            
+        self.__saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
+        
+        # split the minibatch for the gpus
+        self.__embed_list = tf.split(self.__embed, num_or_size_splits=n_gpu,
+                                     axis=0, name="x_list")
         self.__y_list = tf.split(self.__Y, num_or_size_splits=n_gpu,
                                  axis=0, name="y_list")
         self.__l_list = tf.split(self.__L, num_or_size_splits=n_gpu,
@@ -54,20 +65,18 @@ class SequenceClassifier(object):
         self.__loss_list = []
         self.__output_list =[]
         self.__acc_list = []
+        self.__grad_and_var_list = []
             
         for i in range(n_gpu):
             with tf.device("/device:GPU:"+str(i)):
                 
-                tmp_x = self.__x_list[i]
+                tmp_embed = self.__embed_list[i]
                 tmp_y = self.__y_list[i]
                 tmp_l = self.__l_list[i]
-
-                # embedding
-                self.__embed = tf.nn.embedding_lookup(self.__embed_matrix, tmp_x,
-                                                      name="embedding")
+                
                 # input dropout
                 if is_training and keep_prob < 1:
-                    self.__rnn_in = tf.nn.dropout(self.__embed, keep_prob,
+                    self.__rnn_in = tf.nn.dropout(tmp_embed, keep_prob,
                                                   name="input_dropout")
                 else:
                     self.__rnn_in = self.__embed
@@ -93,6 +102,12 @@ class SequenceClassifier(object):
                 self.__loss_list.append(tf.reduce_mean(self.__loss_vec,
                                                        name="loss"))
                 
+                # compute gradients. if training
+                if is_training:
+                    tmp_grads = self.__opt.compute_gradients(self.__loss_list[-1],
+                                                             var_list=tf.trainable_variables())
+                    self.__grad_and_var_list.append(tmp_grads)
+                
                 # accuracy
                 self.__output_list.append(tf.cast(tf.argmax(self.__prob, -1,
                                                             name="output_label"), tf.int32))
@@ -101,17 +116,25 @@ class SequenceClassifier(object):
                 self.__acc_list.append(tf.reduce_mean(tf.cast(self.__accurate, tf.float32),
                                                       name="accuracy"))
             
+        # merge results from the multiple gpus
         self.__loss = tf.reduce_mean(self.__loss_list, 0, name="final_loss")
         self.__output = tf.concat(self.__output_list, 0, name="final_output")
         self.__acc = tf.reduce_mean(self.__acc_list, 0, name="final_accuracy")
         
         # training operation
         if is_training:
-            self.__opt = tf.train.AdamOptimizer(lr, name="adam_optimizer")
-            self.__train_op = self.__opt.minimize(self.__loss,
-                                                  global_step=tf.train.get_or_create_global_step())
-            
-        self.__saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
+            self.__final_grads_and_vars = []
+            for grads_and_vars in zip(*self.__grad_and_var_list):
+                grads = []
+                var = None
+                for tmp_grad, tmp_var in grads_and_vars:
+                    grads.append(tf.expand_dims(tmp_grad, 0))
+                    var = tmp_var
+                tmp_grad = tf.reduce_mean(tf.concat(grads, 0), 0)
+                self.__final_grads_and_vars.append((tmp_grad, var))
+            self.__train_op = self.__opt.apply_gradients(self.__final_grads_and_vars,
+                                                         global_step=tf.train.get_or_create_global_step(),
+                                                         name="train_op")
 
     def train_op(self, sess, X, Y, L):
         

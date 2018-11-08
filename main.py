@@ -8,7 +8,8 @@ Created on Tue Nov  6 17:42:24 2018
 
 import tensorflow as tf
 import numpy
-import os
+import os, sys
+import time
 
 import config
 import dataset
@@ -34,6 +35,19 @@ def main(_):
                                  "tomita_"+str(tomita_idx)+"_"+cell_type+".log")
     model_root = os.path.join(flags.model_root,
                               "tomita_"+str(tomita_idx)+"_"+cell_type+"/")
+    
+    if not flags.stdout:
+        tmp_path = os.path.join(flags.log_root,
+                                "tomita_"+str(tomita_idx)+"_"+cell_type+"_stdout.log")
+        f = open(tmp_path, "w")
+        assert f is not None, "Cannot open \""+tmp_path+"\""
+        sys.stdout = f
+    if not flags.stderr:
+        tmp_path = os.path.join(flags.log_root,
+                                "tomita_"+str(tomita_idx)+"_"+cell_type+"_stderr.log")
+        f = open(tmp_path, "w")
+        assert f is not None, "Cannot open \""+tmp_path+"\""
+        sys.stderr = f
     if not os.path.exists(model_root):
         os.system("mkdir "+model_root)
     model_save_path = os.path.join(model_root, "model.ckpt")
@@ -41,6 +55,8 @@ def main(_):
     os.environ['CUDA_VISIBLE_DEVICES'] = flags.gpu
     gpus = flags.gpu.split(",")
     n_gpu = len(gpus)
+    assert batch_size % n_gpu == 0, \
+        "Cannot fit the batch with the size of "+str(batch_size)+" into "+str(n_gpu)+" gpu's"
     model = classifier.SequenceClassifier(seq_max_len, embed_w, 3, 2, n_cell,
                                           cell_type, 0.8, 1e-5, n_gpu, True)
     cfg = tf.ConfigProto(allow_soft_placement=True)
@@ -48,6 +64,8 @@ def main(_):
     sess = tf.Session(config=cfg)
     sess.run(tf.global_variables_initializer())
     
+    print_per_iter = 100
+    print (flags.gpu)
     if is_training: # train
         os.system("rm -rf "+log_save_path)
         data = dataset.Dataset(dataset_path, seq_max_len)
@@ -59,25 +77,31 @@ def main(_):
             test_acc_list=[]
             train_loss_list=[]
             test_loss_list=[]
-            n_tr_iter = int(data.get_train_size() / batch_size / n_gpu)
-            n_te_iter = int(data.get_test_size() / batch_size / n_gpu)
+            n_tr_iter = int(data.get_train_size() / batch_size)
+            n_te_iter = int(data.get_test_size() / batch_size)
+            
+            time_last = time.time()
             for iteration in range(n_tr_iter):
-                x, y, l = data.minibatch(batch_size * n_gpu)
+                x, y, l = data.minibatch(batch_size)
                 loss, acc = model.train_op(sess, x, y, l)
                 train_acc_list.append(acc)
                 train_loss_list.append(loss)
-                if (iteration % 100 == 0):
-                    print("Epoch = %d\t iter = %d/%d\tTrain Loss = %.3f\tAcc = %.3f"
-                          % (epoch+1, iteration+1, n_tr_iter, loss, acc))
+                if ((iteration+1) % print_per_iter == 0):
+                    time_new = time.time()
+                    print("Epoch = %d\t iter = %d/%d\tTrain Loss = %.3f\tAcc = %.3f\tTime=%.3fsec/iter"
+                          % (epoch+1, iteration+1, n_tr_iter, loss, acc, ((time_new-time_last)/print_per_iter)))
+                    time_last = time_new
+            time_last = time.time()
             for iteration in range(n_te_iter):
-                x, y, l = data.test_batch(batch_size * n_gpu)
+                x, y, l = data.test_batch(batch_size)
                 loss, acc = model.test_op(sess, x, y, l)
                 test_acc_list.append(acc)
                 test_loss_list.append(loss)
-                if (iteration % 100 == 0):
-                    print("Epoch = %d\t iter = %d/%d\tTest Loss = %.3f\tAcc = %.3f"
-                          % (epoch+1, iteration+1, n_te_iter, loss, acc))
-                
+                if ((iteration+1) % print_per_iter == 0):
+                    time_new = time.time()
+                    print("Epoch = %d\t iter = %d/%d\tTest Loss = %.3f\tAcc = %.3f\tTime=%.3fsec/iter"
+                          % (epoch+1, iteration+1, n_te_iter, loss, acc, ((time_new-time_last)/print_per_iter)))
+                    time_last = time_new
             test_loss_mean = numpy.mean(test_loss_list)
             train_loss_mean = numpy.mean(train_loss_list)
             test_acc_mean = numpy.mean(test_acc_list)
