@@ -17,7 +17,7 @@ class SequenceClassifier(object):
     
     def __init__(self, seq_max_len=20, embed_w=5, vocab_size=2, n_class=2,
                  n_hidden=128, cell_type="rnn", keep_prob=0.9, lr=1e-5,
-                 n_gpu=1, is_training=True):
+                 n_gpu=1, grad_clip=1, is_training=True):
         
         self.__is_training = is_training
         if is_training == False:
@@ -66,7 +66,15 @@ class SequenceClassifier(object):
         self.__output_list =[]
         self.__acc_list = []
         self.__grad_and_var_list = []
-            
+        
+        self.__rnn_in_list = []
+        self.__rnn_outs_list = []
+        self.__rnn_states_list = []
+        self.__logit_list = []
+        self.__prob_list = []
+        self.__y_onehot_list = []
+        self.__loss_vec_list = []    
+        
         for i in range(n_gpu):
             with tf.device("/device:GPU:"+str(i)):
                 
@@ -76,31 +84,33 @@ class SequenceClassifier(object):
                 
                 # input dropout
                 if is_training and keep_prob < 1:
-                    self.__rnn_in = tf.nn.dropout(tmp_embed, keep_prob,
-                                                  name="input_dropout")
+                    self.__rnn_in_list.append(tf.nn.dropout(tmp_embed, keep_prob,
+                                                            name="input_dropout_"+str(i)))
                 else:
-                    self.__rnn_in = self.__embed
+                    self.__rnn_in_list.append(tmp_embed)
                 
-                self.__rnn_outs, self.__rnn_states = tf.nn.dynamic_rnn(self.__cell_fw,
-                                                                       self.__rnn_in,
-                                                                       tmp_l,
-                                                                       dtype=tf.float32)
+                out = tf.nn.dynamic_rnn(self.__cell_fw,
+                                        self.__rnn_in_list[-1],
+                                        tmp_l,
+                                        dtype=tf.float32)
+                self.__rnn_outs_list.append(out[0])
+                self.__rnn_states_list.append(out[1])
                 
                 if cell_type in ["rnn", "gru"]:
-                    self.__logit = tf.matmul(self.__rnn_states,
-                                             self.__dense_W) + self.__dense_b
+                    self.__logit_list.append(tf.matmul(self.__rnn_states_list[-1],
+                                                       self.__dense_W) + self.__dense_b)
                 elif cell_type in ["lstm"]:
-                    self.__logit = tf.matmul(self.__rnn_states.h,
-                                             self.__dense_W) + self.__dense_b
-                self.__prob = tf.nn.softmax(self.__logit, name="probability")
+                    self.__logit_list.append(tf.matmul(self.__rnn_states_list[-1].h,
+                                                       self.__dense_W) + self.__dense_b)
+                self.__prob_list.append(tf.nn.softmax(self.__logit_list[-1], name="probability_"+str(i)))
         
                 # cross entropy loss
-                self.__Y_onehot = tf.one_hot(tmp_y, n_class)
-                self.__loss_vec = tf.nn.softmax_cross_entropy_with_logits(labels=self.__Y_onehot,
-                                                                          logits=self.__logit,
-                                                                          name="loss_for_each")
-                self.__loss_list.append(tf.reduce_mean(self.__loss_vec,
-                                                       name="loss"))
+                self.__y_onehot_list.append(tf.one_hot(tmp_y, n_class, name="y_onehot_"+str(i)))
+                self.__loss_vec_list.append(tf.nn.softmax_cross_entropy_with_logits(labels=self.__y_onehot_list[-1],
+                                                                                    logits=self.__logit_list[-1],
+                                                                                    name="loss_for_each_"+str(i)))
+                self.__loss_list.append(tf.reduce_mean(self.__loss_vec_list[-1],
+                                                       name="loss_"+str(i)))
                 
                 # compute gradients. if training
                 if is_training:
@@ -109,7 +119,7 @@ class SequenceClassifier(object):
                     self.__grad_and_var_list.append(tmp_grads)
                 
                 # accuracy
-                self.__output_list.append(tf.cast(tf.argmax(self.__prob, -1,
+                self.__output_list.append(tf.cast(tf.argmax(self.__prob_list[-1], -1,
                                                             name="output_label"), tf.int32))
                 self.__accurate = tf.equal(tmp_y, self.__output_list[-1],
                                            name="accurate_output")
@@ -118,6 +128,7 @@ class SequenceClassifier(object):
             
         # merge results from the multiple gpus
         self.__loss = tf.reduce_mean(self.__loss_list, 0, name="final_loss")
+        self.__prob = tf.concat(self.__prob_list, 0, name="final_prob")
         self.__output = tf.concat(self.__output_list, 0, name="final_output")
         self.__acc = tf.reduce_mean(self.__acc_list, 0, name="final_accuracy")
         
@@ -130,7 +141,10 @@ class SequenceClassifier(object):
                 for tmp_grad, tmp_var in grads_and_vars:
                     grads.append(tf.expand_dims(tmp_grad, 0))
                     var = tmp_var
-                tmp_grad = tf.reduce_mean(tf.concat(grads, 0), 0)
+                tmp_grad = tf.reduce_mean(tf.concat(grads, 0), 0,
+                                          name="gradient")
+                tmp_grad = tf.clip_by_value(tmp_grad, -grad_clip, grad_clip,
+                                            name="gradient_clipping")
                 self.__final_grads_and_vars.append((tmp_grad, var))
             self.__train_op = self.__opt.apply_gradients(self.__final_grads_and_vars,
                                                          global_step=tf.train.get_or_create_global_step(),

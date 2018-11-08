@@ -40,6 +40,9 @@ tf.app.flags.DEFINE_float("learning_rate", 1e-5,
                           "Learning rate during training")
 tf.app.flags.DEFINE_float("keep_prob", 0.8,
                           "Probability of keeping when applying drop-out")
+tf.app.flags.DEFINE_float("grad_clip", 1,
+                          "Threshold to carry out gradient clipping")
+
 tf.app.flags.DEFINE_boolean("stdout", True,
                             "Use STDOUT instead of redirecting it to log")
 tf.app.flags.DEFINE_boolean("stderr", True,
