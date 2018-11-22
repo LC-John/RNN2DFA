@@ -65,13 +65,13 @@ class SequenceClassifier(object):
         self.__loss_list = []
         self.__output_list =[]
         self.__acc_list = []
+        self.__prob_list = []
         self.__grad_and_var_list = []
         
         self.__rnn_in_list = []
         self.__rnn_outs_list = []
         self.__rnn_states_list = []
         self.__logit_list = []
-        self.__prob_list = []
         self.__y_onehot_list = []
         self.__loss_vec_list = []    
         
@@ -226,13 +226,22 @@ if __name__ == "__main__":
     model_save_path = os.path.join(model_root, "model.ckpt")
     log_save_path = "./log/tomita_"+str(tomita_idx)+"_rnn.log"
     
-    os.environ['CUDA_VISIBLE_DEVICES'] = "1,4"
-    n_gpu = 2
+    os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+    n_gpu = 1
     os.system("rm -rf "+log_save_path)
     
     data = dataset.Dataset(dataset_path, seq_max_len)
-    model = SequenceClassifier(seq_max_len, embed_w, len(data.get_alphabet())+1, 2, n_cell,
-                               cell_type, 0.8, 1e-5, n_gpu, True)
+    model = SequenceClassifier(seq_max_len=seq_max_len,
+                               embed_w=embed_w,
+                               vocab_size=len(data.get_alphabet())+1,
+                               n_class=2,
+                               n_hidden=n_cell,
+                               cell_type=cell_type,
+                               keep_prob=0.8,
+                               lr=5e-4,
+                               n_gpu=n_gpu,
+                               grad_clip=1,
+                               is_training=True)
     
     cfg = tf.ConfigProto(allow_soft_placement=True)
     cfg.gpu_options.allow_growth = True
