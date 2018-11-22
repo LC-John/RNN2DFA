@@ -5,9 +5,9 @@
 *.log
 
 # Model
-checkpoint
-*.ckpt
-*.ckpt.*
+#checkpoint
+#*.ckpt
+#*.ckpt.*
 
 # Python
 *.pyc

@@ -2,8 +2,6 @@
 
 This is a project aiming to extract a minimal DFA from a well-trained RNN model.
 
-[TOC]
-
 ## The Tomita Grammars
 
 The Tomita grammars are a set of widely used benchmark grammars in the problem of grammar inference. It contains 7 different regular grammars defined upon the binary alphabet <img src="http://latex.codecogs.com/gif.latex?\Sigma=\{0,1\}" />, as shown below.
