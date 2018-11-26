@@ -111,3 +111,12 @@ Sequence datasets of all Tomita grammars are generated, with the max length of 2
 </table>
 
 Only those models with <img src="http://latex.codecogs.com/gif.latex?Acc_{train}>99.9%" /> and <img src="http://latex.codecogs.com/gif.latex?Acc_{test}>99.9%" /> are referred as models who have learned the grammar well. Therefore the RNN2DFA extraction is applied only on these models.
+
+### Clustering of the Hidden State
+
+Currently, it is quite odd that our rnns do not tend to cluster as shown in the previous papers. Instead, we have such "cloud-like" hidden state distribution, as shown below.
+
+![gru_cluster_1](./images/short_seq_gru_cluster_1.jpeg)
+![gru_cluster_2](./images/short_seq_gru_cluster_2.jpeg)
+![gru_cluster_3](./images/short_seq_gru_cluster_3.jpeg)
+![gru_cluster_4](./images/short_seq_gru_cluster_4.jpeg)

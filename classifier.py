@@ -238,12 +238,12 @@ if __name__ == "__main__":
     if len(sys.argv) >= 2:
         tomita_idx = int(sys.argv[1])
     
-    dataset_path = "./tomita/tomita_"+str(tomita_idx)+".pkl"
+    dataset_path = "./tomita/tomita_"+str(tomita_idx)+"_L100.pkl"
     cell_type = "gru"
     
-    seq_max_len = 20
+    seq_max_len = 100
     embed_w = 5
-    n_cell = 128
+    n_cell = 50
     
     n_epoch = 100
     batch_size = 32
@@ -254,8 +254,8 @@ if __name__ == "__main__":
     tensorboard_log_path = "./log/tomita_"+str(tomita_idx)+"_rnn.tb"
     log_save_path = "./log/tomita_"+str(tomita_idx)+"_rnn.log"
     
-    os.environ['CUDA_VISIBLE_DEVICES'] = "0,1,2"
-    n_gpu = 3
+    os.environ['CUDA_VISIBLE_DEVICES'] = "2,3"
+    n_gpu = 2
     os.system("rm -rf "+log_save_path)
     
     data = dataset.Dataset(dataset_path, seq_max_len)
