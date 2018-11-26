@@ -29,16 +29,14 @@ class Generator(object):
         else:
             self.__pass_rate = pass_rate
         
-    def generate(self, maxl):
+    def generate(self, l, size=100000):
         
-        self.__d = [[""], [int(self.__dfa.classify(""))]]
-        for l in range(1, maxl+1):
-            seqs = self.__generate_seq(self.__Sigma, l)
-            for s in seqs:
-                if self.__pass_rate >= numpy.random.uniform(0, 1):
-                    continue
-                self.__d[0].append(s)
-                self.__d[1].append(int(self.__dfa.classify(s)))
+        self.__d = [[], []]
+        for i in range(size):
+            s = self.__dfa.generate(l)
+            if s[0] not in self.__d[0]:
+                self.__d[0].append(s[0])
+                self.__d[1].append(s[1])
         print ("N = "+str(len(self.__d[0])))
         split_idx = int(self.__train_ratio * len(self.__d[0]))
         self.__d_te = [self.__d[0][split_idx:], self.__d[1][split_idx:]]
@@ -65,7 +63,7 @@ class Generator(object):
         
 if __name__ == "__main__":
     
-    maxl = 20
+    maxl = 100
     dfas = [tomita.Tomita_1,
             tomita.Tomita_2,
             tomita.Tomita_3,
@@ -76,5 +74,5 @@ if __name__ == "__main__":
     for i in range(len(dfas)):
         G = Generator(dfas[i](), 0.5, 0.5)
         G.generate(maxl)
-        G.save("tomita_"+str(i+1)+".pkl")
+        G.save("tomita_"+str(i+1)+"_L100.pkl")
         print ("tomita "+str(i+1)+" complete!")

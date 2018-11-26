@@ -15,21 +15,20 @@ from util import write_log
 
 class SequenceClassifier(object):
     
-    def __init__(self, seq_max_len=20, embed_w=5, vocab_size=2, n_class=2,
-                 n_hidden=128, cell_type="rnn", keep_prob=0.9, lr=1e-5,
-                 n_gpu=1, grad_clip=1, is_training=True):
+    def __init__(self, embed_w=5, vocab_size=2, n_class=2, n_hidden=128, cell_type="rnn",
+                 lr_init=1e-3, lr_min=1e-5, lr_decay_rate=0.5, lr_decay_steps=3000,
+                 gpus=["0"], grad_clip=1, is_training=True, log_path="log/some.log"):
         
         self.__is_training = is_training
-        if is_training == False:
-            is_training = True
-            keep_prob = 1.0
         
         # placeholders for the language model -- input, output & valid seq length
-        self.__X = tf.placeholder(shape=[None, seq_max_len],
+        self.__X = tf.placeholder(shape=[None, None],
                                   dtype=tf.int32, name="input")
         self.__Y = tf.placeholder(shape=[None, ],
                                   dtype=tf.int32, name="label")
         self.__L = tf.placeholder(shape=[None], dtype=tf.int32, name="valid_len")
+        # placeholder for keep_prob during dropout
+        self.__keep_prob = tf.placeholder(shape=[], dtype=tf.float32, name="keep_prob")
         
         # embedding matrix
         with tf.device("/cpu:0"):
@@ -46,22 +45,30 @@ class SequenceClassifier(object):
         self.__dense_b = tf.get_variable("dense_b", [n_class],
                                          dtype=tf.float32)
         # rnn cells
-        self.__cell_fw = self.__make_cell(is_training, n_hidden, keep_prob, cell_type)
+        self.__cell_fw = self.__make_cell(is_training, n_hidden, cell_type)
         
         # optimizer, if training
         if is_training:
-            self.__opt = tf.train.AdamOptimizer(lr, name="adam_optimizer")
+            self.__lr = tf.train.exponential_decay(learning_rate=lr_init,
+                                                   global_step=tf.train.get_or_create_global_step(),
+                                                   decay_steps=lr_decay_steps,
+                                                   decay_rate=lr_decay_rate) + lr_min
+            self.__opt = tf.train.AdamOptimizer(self.__lr, name="adam_optimizer")
             
         self.__saver = tf.train.Saver(tf.trainable_variables(), max_to_keep=1)
         
         # split the minibatch for the gpus
-        self.__embed_list = tf.split(self.__embed, num_or_size_splits=n_gpu,
+        n_gpu = len(gpus)
+        sizes = [tf.cast(tf.shape(self.__X)[0]/n_gpu, tf.int32) \
+                 for i in range(n_gpu-1)]
+        sizes.append(tf.shape(self.__X)[0] - tf.reduce_sum(sizes))
+        self.__embed_list = tf.split(self.__embed, num_or_size_splits=sizes,
                                      axis=0, name="x_list")
-        self.__y_list = tf.split(self.__Y, num_or_size_splits=n_gpu,
+        self.__y_list = tf.split(self.__Y, num_or_size_splits=sizes,
                                  axis=0, name="y_list")
-        self.__l_list = tf.split(self.__L, num_or_size_splits=n_gpu,
+        self.__l_list = tf.split(self.__L, num_or_size_splits=sizes,
                                  axis=0, name="l_list")
-            
+        
         self.__loss_list = []
         self.__output_list =[]
         self.__acc_list = []
@@ -76,18 +83,15 @@ class SequenceClassifier(object):
         self.__loss_vec_list = []    
         
         for i in range(n_gpu):
-            with tf.device("/device:GPU:"+str(i)):
+            with tf.device("/device:GPU:"+gpus[i]):
                 
                 tmp_embed = self.__embed_list[i]
                 tmp_y = self.__y_list[i]
                 tmp_l = self.__l_list[i]
                 
                 # input dropout
-                if is_training and keep_prob < 1:
-                    self.__rnn_in_list.append(tf.nn.dropout(tmp_embed, keep_prob,
-                                                            name="input_dropout_"+str(i)))
-                else:
-                    self.__rnn_in_list.append(tmp_embed)
+                self.__rnn_in_list.append(tf.nn.dropout(tmp_embed, self.__keep_prob,
+                                                        name="input_dropout_"+str(i)))
                 
                 out = tf.nn.dynamic_rnn(self.__cell_fw,
                                         self.__rnn_in_list[-1],
@@ -131,6 +135,7 @@ class SequenceClassifier(object):
         self.__prob = tf.concat(self.__prob_list, 0, name="final_prob")
         self.__output = tf.concat(self.__output_list, 0, name="final_output")
         self.__acc = tf.reduce_mean(self.__acc_list, 0, name="final_accuracy")
+        self.__hidden_states = tf.concat(self.__rnn_outs_list, 0, name="final_hidden_states")
         
         # training operation
         if is_training:
@@ -150,31 +155,56 @@ class SequenceClassifier(object):
                                                          global_step=tf.train.get_or_create_global_step(),
                                                          name="train_op")
 
-    def train_op(self, sess, X, Y, L):
+        if is_training:
+            self.__summary_lr = tf.summary.scalar("lr", self.__lr)
+            self.__summary_loss_train = tf.summary.scalar("loss_train", self.__loss)
+            self.__summary_acc_train = tf.summary.scalar("acc_train", self.__acc)
+        self.__summary_loss = tf.summary.scalar("loss", self.__loss)
+        self.__summary_acc = tf.summary.scalar("acc", self.__acc)
+        self.__summary_writer = tf.summary.FileWriter(log_path, tf.get_default_graph())
+
+    def train_op(self, sess, X, Y, L, iteration, keep_prob=0.8):
         
         if self.__is_training:
-            _, l, a = sess.run((self.__train_op, self.__loss, self.__acc),
-                               feed_dict={self.__X: X,
-                                          self.__Y: Y,
-                                          self.__L: L})
+            _, l, a, slr, sl, sa = sess.run((self.__train_op, self.__loss, self.__acc,
+                                             self.__summary_lr, self.__summary_loss_train,
+                                             self.__summary_acc_train),
+                                            feed_dict={self.__X: X,
+                                                       self.__Y: Y,
+                                                       self.__L: L,
+                                                       self.__keep_prob: keep_prob})
+            self.__summary_writer.add_summary(slr, iteration)
+            self.__summary_writer.add_summary(sl, iteration)
+            self.__summary_writer.add_summary(sa, iteration)
             return l, a
         else:
             return None
     
-    def test_op(self, sess, X, Y, L):
+    def test_op(self, sess, X, Y, L, iteration):
         
-        l, a = sess.run((self.__loss, self.__acc),
-                        feed_dict={self.__X: X,
-                                   self.__Y: Y,
-                                   self.__L: L})
+        l, a, sl, sa = sess.run((self.__loss, self.__acc, self.__summary_loss, self.__summary_acc),
+                                feed_dict={self.__X: X,
+                                           self.__Y: Y,
+                                           self.__L: L,
+                                           self.__keep_prob: 1.0})
+        self.__summary_writer.add_summary(sl, iteration)
+        self.__summary_writer.add_summary(sa, iteration)
         return l, a
     
     def prob_op(self, sess, X, L):
         
         p, o = sess.run((self.__prob, self.__output),
                         feed_dict={self.__X: X,
-                                   self.__L: L})
+                                   self.__L: L,
+                                   self.__keep_prob: 1.0})
         return p, o
+    
+    def get_hidden_states(self, sess, X, L):
+        
+        h = sess.run(self.__hidden_states, feed_dict={self.__X: X,
+                                                      self.__L: L,
+                                                      self.__keep_prob: 1.0})
+        return h
 
     def save(self, sess, path):
         
@@ -184,7 +214,7 @@ class SequenceClassifier(object):
         
         self.__saver.restore(sess, path)
 
-    def __make_cell(self, is_training, n_hidden, keep_prob, cell_type):
+    def __make_cell(self, is_training, n_hidden, cell_type):
         
         # make the cells
         if cell_type == "rnn":
@@ -197,11 +227,8 @@ class SequenceClassifier(object):
         else:
             assert False, "invalid cell type "+cell_type
         # dropout if needed
-        if is_training and keep_prob < 1:
-            cell = tf.contrib.rnn.DropoutWrapper(tmp_cell,
-                                                 output_keep_prob=keep_prob)
-        else:
-            cell = tmp_cell
+        cell = tf.contrib.rnn.DropoutWrapper(tmp_cell,
+                                             output_keep_prob=self.__keep_prob)
         return cell
     
 if __name__ == "__main__":
@@ -224,24 +251,27 @@ if __name__ == "__main__":
     if not os.path.exists(model_root):
         os.system("mkdir "+model_root)
     model_save_path = os.path.join(model_root, "model.ckpt")
+    tensorboard_log_path = "./log/tomita_"+str(tomita_idx)+"_rnn.tb"
     log_save_path = "./log/tomita_"+str(tomita_idx)+"_rnn.log"
     
-    os.environ['CUDA_VISIBLE_DEVICES'] = "0"
-    n_gpu = 1
+    os.environ['CUDA_VISIBLE_DEVICES'] = "0,1,2"
+    n_gpu = 3
     os.system("rm -rf "+log_save_path)
     
     data = dataset.Dataset(dataset_path, seq_max_len)
-    model = SequenceClassifier(seq_max_len=seq_max_len,
-                               embed_w=embed_w,
+    model = SequenceClassifier(embed_w=embed_w,
                                vocab_size=len(data.get_alphabet())+1,
                                n_class=2,
                                n_hidden=n_cell,
                                cell_type=cell_type,
-                               keep_prob=0.8,
-                               lr=5e-4,
-                               n_gpu=n_gpu,
+                               lr_init=1e-3,
+                               lr_min=1e-5,
+                               lr_decay_rate=0.5,
+                               lr_decay_steps=3000,
+                               gpus=[str(i) for i in range(n_gpu)],
                                grad_clip=1,
-                               is_training=True)
+                               is_training=True,
+                               log_path=tensorboard_log_path)
     
     cfg = tf.ConfigProto(allow_soft_placement=True)
     cfg.gpu_options.allow_growth = True
@@ -260,20 +290,14 @@ if __name__ == "__main__":
         n_te_iter = int(data.get_test_size() / batch_size)
         for iteration in range(n_tr_iter):
             x, y, l = data.minibatch(batch_size*n_gpu)
-            loss, acc = model.train_op(sess, x, y, l)
+            loss, acc = model.train_op(sess, x, y, l, epoch*n_tr_iter+iteration, 1.0)
             train_acc_list.append(acc)
             train_loss_list.append(loss)
-            if (iteration % 100 == 0):
-                print("Epoch = %d\t iter = %d/%d\tTrain Loss = %.3f\tAcc = %.3f"
-                      % (epoch+1, iteration+1, n_tr_iter, loss, acc))
         for iteration in range(n_te_iter):
             x, y, l = data.test_batch(batch_size*n_gpu)
-            loss, acc = model.test_op(sess, x, y, l)
+            loss, acc = model.test_op(sess, x, y, l, epoch*n_te_iter+iteration)
             test_acc_list.append(acc)
             test_loss_list.append(loss)
-            if (iteration % 100 == 0):
-                print("Epoch = %d\t iter = %d/%d\tTest Loss = %.3f\tAcc = %.3f"
-                      % (epoch+1, iteration+1, n_te_iter, loss, acc))
             
         test_loss_mean = numpy.mean(test_loss_list)
         train_loss_mean = numpy.mean(train_loss_list)
